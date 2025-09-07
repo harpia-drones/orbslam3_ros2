@@ -6,9 +6,9 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    mono_cam_node = Node(
+    monocular_node = Node(
         package="slam",
-        executable="mono_cam",
+        executable="monocular",
         namespace="", # MODIFY
         remappings=[
             ("color", "color/compressed"), # MODIFY
@@ -20,6 +20,6 @@ def generate_launch_description():
         ]
     )
 
-    ld.add_action(mono_cam_node)
+    ld.add_action(monocular_node)
 
     return ld

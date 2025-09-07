@@ -21,14 +21,14 @@ find_package(nav_msgs REQUIRED)
 # It is not necessary execute find_packages() for those packages.
 
 # ========================================
-#     MONO CAM
+#     MONOCULAR
 # ========================================
 
-add_executable(mono_cam
-  src/mono_cam.cpp
+add_executable(monocular
+  src/monocular.cpp
 )
 
-ament_target_dependencies(mono_cam
+ament_target_dependencies(monocular
   rclcpp
   cv_bridge
   sensor_msgs
@@ -36,13 +36,13 @@ ament_target_dependencies(mono_cam
   nav_msgs
 )
 
-target_link_libraries(mono_cam
+target_link_libraries(monocular
   ORB_SLAM3::ORB_SLAM3
   ${OpenCV_LIBS}
 )
 
 install(TARGETS 
-  mono_cam
+  monocular
   DESTINATION lib/${PROJECT_NAME}
 )
 

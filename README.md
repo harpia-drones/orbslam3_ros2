@@ -36,7 +36,7 @@ cb orbslam3_ros2
 
 - Inicar o node do slam monocular
 ```bash
-ros2 launch orbslam3_ros2 mono_cam.launch.py
+ros2 launch orbslam3_ros2 monocular.launch.py
 ```
 
 - Adicionar uma TF para a camera (caso necessário)
