@@ -9,6 +9,7 @@
 #include <nav_msgs/msg/path.hpp>
 
 #include <mutex>
+#include <queue>
 
 using namespace std::placeholders;
 using namespace std::chrono_literals;
@@ -63,7 +64,7 @@ class RgbdInertialSlamNode
         );
     }
 
-    ~MonoCamSlamNode() 
+    ~RgbdInertialSlamNode() 
     {
         SLAM->Shutdown();
         RCLCPP_INFO(this->get_logger(), "Node do RGBDInertial parou de rodar");
@@ -100,7 +101,7 @@ private:
     void rgb_callback(const sensor_msgs::msg::Image::SharedPtr msg) {
         std::lock_guard<std::mutex> lock(mutex_);
         
-        cv::bridge::CvImagePtr rgb_cv_ptr;
+        cv_bridge::CvImagePtr rgb_cv_ptr;
         try {
             last_timestamp = timestamp;
             rgb_cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
@@ -116,7 +117,7 @@ private:
     void depth_callback(const sensor_msgs::msg::Image::SharedPtr msg) {
         std::lock_guard<std::mutex> lock(mutex_);
         
-        cv::bridge::CvImagePtr depth_cv_ptr;
+        cv_bridge::CvImagePtr depth_cv_ptr;
         try {
             depth_cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_16UC1);
             depth_frame = depth_cv_ptr->image;
@@ -133,8 +134,9 @@ private:
 
 
     void slam_loop() {
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (rgb_frame.empty() || depth_frame.empty() || imu_buffer_.empty()) {
-            RCLCPP_INFO(this->get_logger(), "Vazio por enquanto");
             return;
         }
 
