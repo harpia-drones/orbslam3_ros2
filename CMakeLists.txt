@@ -24,11 +24,11 @@ find_package(nav_msgs REQUIRED)
 #     MONOCULAR
 # ========================================
 
-add_executable(monocular
-  src/monocular.cpp
+add_executable(rgbd_inertial
+  src/rgbd_inertial.cpp
 )
 
-ament_target_dependencies(monocular
+ament_target_dependencies(rgbd_inertial
   rclcpp
   cv_bridge
   sensor_msgs
@@ -36,13 +36,13 @@ ament_target_dependencies(monocular
   nav_msgs
 )
 
-target_link_libraries(monocular
+target_link_libraries(rgbd_inertial
   ORB_SLAM3::ORB_SLAM3
   ${OpenCV_LIBS}
 )
 
 install(TARGETS 
-  monocular
+  rgbd_inertial
   DESTINATION lib/${PROJECT_NAME}
 )
 

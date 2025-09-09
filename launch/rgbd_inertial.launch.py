@@ -8,10 +8,12 @@ def generate_launch_description():
 
     monocular_node = Node(
         package="slam",
-        executable="monocular",
+        executable="rgbd_inertial",
         namespace="", # MODIFY
         remappings=[
-            ("color", "color/compressed"), # MODIFY
+            ("rgb", "?"),
+            ("depth", "?"),
+            ("imu", "?"),
         ],
         parameters=[
             {"orb_voc_path": str(os.environ.get("ORB_VOC_PATH"))},
