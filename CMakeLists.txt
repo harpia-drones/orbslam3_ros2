@@ -47,6 +47,32 @@ install(TARGETS
 )
 
 # ========================================
+#     MONOCULAR DEBUG
+# ========================================
+
+add_executable(monocular_debug
+  src/monocular_debug.cpp
+)
+
+ament_target_dependencies(monocular_debug
+  rclcpp
+  cv_bridge
+  sensor_msgs
+  geometry_msgs
+  nav_msgs
+)
+
+target_link_libraries(monocular_debug
+  ORB_SLAM3::ORB_SLAM3
+  ${OpenCV_LIBS}
+)
+
+install(TARGETS 
+  monocular_debug
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# ========================================
 #     LAUNCH
 # ========================================
 

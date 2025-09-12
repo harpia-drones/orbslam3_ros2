@@ -29,7 +29,7 @@ class MonoCamSlamNode
         int camera_fps = this->get_parameter("camera_fps").as_int();
 
         // ORB_SLAM3
-        SLAM = std::make_unique<ORB_SLAM3::System>(orb_voc_path_, settings_path_, ORB_SLAM3::System::MONOCULAR, false);
+        SLAM = std::make_unique<ORB_SLAM3::System>(orb_voc_path_, settings_path_, ORB_SLAM3::System::MONOCULAR, true);
         image_scale = SLAM->GetImageScale();
 
         // Subscribers

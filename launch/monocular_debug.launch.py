@@ -6,9 +6,9 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    monocular_node = Node(
+    monocular_debug_node = Node(
         package="slam",
-        executable="monocular",
+        executable="monocular_debug",
         namespace="",
         remappings=[
             ("color", "color/compressed"),
@@ -20,6 +20,6 @@ def generate_launch_description():
         ]
     )
 
-    ld.add_action(monocular_node)
+    ld.add_action(monocular_debug_node)
 
     return ld
