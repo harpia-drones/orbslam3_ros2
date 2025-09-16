@@ -11,9 +11,9 @@ def generate_launch_description():
         executable="rgbd_inertial",
         namespace="", # MODIFY
         remappings=[
-            ("rgb", "?"),
-            ("depth", "?"),
-            ("imu", "?"),
+            ("rgb", "camera/down/color/image_raw"),
+            ("depth", "camera/down/depth/image_rect_raw"),
+            ("imu", "camera/down/imu"),
         ],
         parameters=[
             {"orb_voc_path": str(os.environ.get("ORB_VOC_PATH"))},
