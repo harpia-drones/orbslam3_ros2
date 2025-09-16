@@ -23,7 +23,7 @@ git clone git@github.com:harpia-drones/orbslam3_ros2.git
 2. Importar variável de ambiente para Launch File
 ```bash
 cd orbslam3_ros2/config
-echo "export SIMPLE_CAM_CONFIG_PATH='$(pwd)/simple_mono_cam.yaml'" >> ~/.bashrc
+echo "export SIMPLE_CAM_CONFIG_PATH='$(pwd)/RealSense_D435i.yaml'" >> ~/.bashrc
 source ~/.bashrc
 ```
 
