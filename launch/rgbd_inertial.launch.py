@@ -22,6 +22,6 @@ def generate_launch_description():
         ]
     )
 
-    ld.add_action(monocular_node)
+    ld.add_action(RgbdInertial_node)
 
     return ld
