@@ -6,7 +6,7 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    monocular_node = Node(
+    RgbdInertial_node = Node(
         package="orbslam3_ros2",
         executable="rgbd_inertial",
         namespace="", # MODIFY
