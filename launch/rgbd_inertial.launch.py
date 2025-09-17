@@ -7,7 +7,7 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     monocular_node = Node(
-        package="slam",
+        package="orbslam3_ros2",
         executable="rgbd_inertial",
         namespace="", # MODIFY
         remappings=[
