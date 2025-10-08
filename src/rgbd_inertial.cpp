@@ -137,6 +137,18 @@ private:
         std::lock_guard<std::mutex> lock(mutex_);
 
         if (rgb_frame.empty() || depth_frame.empty() || imu_buffer_.empty()) {
+            auto pose_msg = geometry_msgs::msg::PoseStamped();
+            pose_msg.header.stamp = this->get_clock()->now();
+            pose_msg.header.frame_id = "odom";
+            pose_msg.pose.position.x = 0.0;
+            pose_msg.pose.position.y = 0.0;
+            pose_msg.pose.position.z = 0.0;
+            pose_msg.pose.orientation.x = 0.0;
+            pose_msg.pose.orientation.y = 0.0;
+            pose_msg.pose.orientation.z = 0.0;
+            pose_msg.pose.orientation.w = 1.0;
+            pose_pub_->publish(pose_msg);
+
             return;
         }
 
