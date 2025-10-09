@@ -62,6 +62,18 @@ class RgbdInertialSlamNode
                 slam_loop();
             }
         );
+
+        auto pose = geometry_msgs::msg::PoseStamped();
+        pose.header.stamp = this->get_clock()->now();
+        pose.header.frame_id = "odom";
+        pose.pose.position.x = 0.0;
+        pose.pose.position.y = 0.0;
+        pose.pose.position.z = 0.0;
+        pose.pose.orientation.x = 0.0;
+        pose.pose.orientation.y = 0.0;
+        pose.pose.orientation.z = 0.0;
+        pose.pose.orientation.w = 1.0;
+        last_published_pose = pose;
     }
 
     ~RgbdInertialSlamNode() 
@@ -96,6 +108,8 @@ private:
     rclcpp::Time header_timestamp; 
     cv::Mat rgb_frame, depth_frame;
     std::queue<sensor_msgs::msg::Imu::SharedPtr> imu_buffer_;
+
+    geometry_msgs::msg::PoseStamped last_published_pose;
 
     // Os timestamps são puxados somente do rgb
     void rgb_callback(const sensor_msgs::msg::Image::SharedPtr msg) {
@@ -137,17 +151,9 @@ private:
         std::lock_guard<std::mutex> lock(mutex_);
 
         if (rgb_frame.empty() || depth_frame.empty() || imu_buffer_.empty()) {
-            auto pose_msg = geometry_msgs::msg::PoseStamped();
-            pose_msg.header.stamp = this->get_clock()->now();
-            pose_msg.header.frame_id = "odom";
-            pose_msg.pose.position.x = 0.0;
-            pose_msg.pose.position.y = 0.0;
-            pose_msg.pose.position.z = 0.0;
-            pose_msg.pose.orientation.x = 0.0;
-            pose_msg.pose.orientation.y = 0.0;
-            pose_msg.pose.orientation.z = 0.0;
-            pose_msg.pose.orientation.w = 1.0;
-            pose_pub_->publish(pose_msg);
+
+            last_published_pose.stamp = this->get_clock()->now();
+            pose_pub_->publish(last_published_pose);
 
             return;
         }
@@ -178,6 +184,10 @@ private:
 
         if (Tcw.matrix().isIdentity()) {
             RCLCPP_WARN(this->get_logger(), "Inicializando o sistema de SLAM...");
+
+            last_published_pose.stamp = this->get_clock()->now();
+            pose_pub_->publish(last_published_pose);
+
             return;
         } else {
             slam_threads_started = true; // marks that slam is actually running
