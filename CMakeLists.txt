@@ -16,6 +16,7 @@ find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(px4_msgs REQUIRED)
 
 # OBS.: the ORB_SLAM3 include by itself: OpenCV, Sophus, Eigen, DBoW2, Pangolin, g2o. 
 # It is not necessary execute find_packages() for those packages.
@@ -34,11 +35,11 @@ ament_target_dependencies(monocular
   sensor_msgs
   geometry_msgs
   nav_msgs
+  px4_msgs
 )
 
 target_link_libraries(monocular
   ORB_SLAM3::ORB_SLAM3
-  ${OpenCV_LIBS}
 )
 
 install(TARGETS 
@@ -47,28 +48,54 @@ install(TARGETS
 )
 
 # ========================================
-#     MONOCULAR DEBUG
+#     MONOCULAR INERTIAL
 # ========================================
 
-add_executable(monocular_debug
-  src/monocular_debug.cpp
+add_executable(monocular_inertial
+  src/monocular_inertial.cpp
 )
 
-ament_target_dependencies(monocular_debug
+ament_target_dependencies(monocular_inertial
   rclcpp
   cv_bridge
   sensor_msgs
   geometry_msgs
   nav_msgs
+  px4_msgs
 )
 
-target_link_libraries(monocular_debug
+target_link_libraries(monocular_inertial
   ORB_SLAM3::ORB_SLAM3
-  ${OpenCV_LIBS}
 )
 
 install(TARGETS 
-  monocular_debug
+  monocular_inertial
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# ========================================
+#     RGBD INERTIAL
+# ========================================
+
+add_executable(rgbd_inertial
+  src/rgbd_inertial.cpp
+)
+
+ament_target_dependencies(rgbd_inertial
+  rclcpp
+  cv_bridge
+  sensor_msgs
+  geometry_msgs
+  nav_msgs
+  px4_msgs
+)
+
+target_link_libraries(rgbd_inertial
+  ORB_SLAM3::ORB_SLAM3
+)
+
+install(TARGETS 
+  rgbd_inertial
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -1,25 +1,38 @@
 #include <rclcpp/rclcpp.hpp>
+
+#include <orbslam3/System.h>
+
+#include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.hpp>
+
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <opencv2/opencv.hpp>
-#include <orbslam3/System.h>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
+
+#include <deque>
+#include <Eigen/Dense>
+#include <sophus/so3.hpp>
+
 
 using namespace std::placeholders;
 using namespace std::chrono_literals;
 
 
+
 class MonoCamSlamNode 
 : public rclcpp::Node
 {
-    public:
+public:
     MonoCamSlamNode(const std::string& node_name)
     : Node(node_name), last_timestamp(0.0), timestamp(0.00001)
     {
         RCLCPP_INFO(this->get_logger(), "SLAM Node has been started!");
 
-        // Parameters
+        // ========================================
+        //     Parameters
+        // ========================================
+
         this->declare_parameter<std::string>("orb_voc_path");
         this->declare_parameter<std::string>("settings_path");
         this->declare_parameter<int>("camera_fps");
@@ -28,19 +41,34 @@ class MonoCamSlamNode
         std::string settings_path_ = this->get_parameter("settings_path").as_string();
         int camera_fps = this->get_parameter("camera_fps").as_int();
 
-        // ORB_SLAM3
+        // ========================================
+        //     ORB_SLAM3
+        // ========================================
+
         SLAM = std::make_unique<ORB_SLAM3::System>(orb_voc_path_, settings_path_, ORB_SLAM3::System::MONOCULAR, false);
         image_scale = SLAM->GetImageScale();
 
-        // Subscribers
+        // ========================================
+        //     Subscribers
+        // ========================================
+
         color_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>("color", 10, std::bind(&MonoCamSlamNode::subcriber_callback, this, _1));
 
-        // Publishers
-        pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("pose", 10);
-        path_pub_ = this->create_publisher<nav_msgs::msg::Path>("trajectory", 10);
-        path_msg_.header.frame_id = "odom";  // Initialize Path
+        // ========================================
+        //     Publishers
+        // ========================================
 
-        // Timer to loop
+        pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("pose", 10);
+
+        path_pub_ = this->create_publisher<nav_msgs::msg::Path>("trajectory", 10);
+        path_msg.header.frame_id = "odom";  // Initialize Path
+        
+        vehicle_odometry_publisher_ = this->create_publisher<px4_msgs::msg::VehicleOdometry>("fmu/in/vehicle_visual_odometry", 10);
+
+        // ========================================
+        //     Timers
+        // ========================================
+        
         period_ = std::chrono::milliseconds(1000/camera_fps);
         timer_ = this->create_wall_timer(
             period_,
@@ -57,6 +85,11 @@ class MonoCamSlamNode
     }
 
 private:
+
+    // ========================================
+    //     Attributes
+    // ========================================
+
     // Timer
     std::chrono::milliseconds period_;
     rclcpp::TimerBase::SharedPtr timer_;
@@ -64,8 +97,10 @@ private:
     // Publishers
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+    rclcpp::Publisher<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_publisher_;
 
-    nav_msgs::msg::Path path_msg_; // path message
+    // Messages
+    nav_msgs::msg::Path path_msg; 
 
     // Subscribers
     rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr color_sub_; 
@@ -80,6 +115,14 @@ private:
 
     cv::Mat frame, frame_gray;
     int width, height;
+
+    // parâmetros configuráveis
+    const size_t COV_WINDOW = 30;        // número de poses para janela (ajuste: 10-100)
+    const double VAR_FLOOR = 1e-6;       // mínimo para variâncias
+
+    // ========================================
+    //     Methods
+    // ========================================
 
     void subcriber_callback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg) {
         
@@ -166,7 +209,7 @@ private:
         Eigen::Matrix3f R = Twc.rotationMatrix();
         Eigen::Vector3f t = Twc.translation();
 
-        // Convert to PoseStamped
+        // Pose Stamped
         auto pose_msg = geometry_msgs::msg::PoseStamped();
 
         pose_msg.header.stamp = header_timestamp;
@@ -184,11 +227,39 @@ private:
 
         pose_pub_->publish(pose_msg);
 
-        // Acumulate trajectory
-        path_msg_.header.stamp = time;
-        path_msg_.poses.push_back(pose_msg);
+        // Path
+        path_msg.header.stamp = time;
+        path_msg.poses.push_back(pose_msg);
+        path_pub_->publish(path_msg);
+
+
+        // // Vehicle Odometry
+        // auto vo_msg = px4_msgs::msg::VehicleOdometry();
+
+        // vo_msg.timestamp = ...;
+        // vo_msg.pose_frame = px4_msgs::msg::VehicleOdometry::POSE_FRAME_FRD; // ajustar conforme seu frame
         
-        path_pub_->publish(path_msg_);
+        // vo_msg.position[0] = t(0); 
+        // vo_msg.position[1] = t(1); 
+        // vvo_msgo.position[2] = t(2);
+        
+        // vo_msg.q[0] = q.w(); 
+        // vo_msg.q[1] = q.x(); 
+        // vo_msg.q[2] = q.y(); 
+        // vo_msg.q[3] = q.z();
+
+        // // position_variance e orientation_variance são arrays de 3 floats
+        // vo_msg.position_variance[0] = pos_var(0);
+        // vo_msg.position_variance[1] = pos_var(1);
+        // vo_msg.position_variance[2] = pos_var(2);
+
+        // // orientation_variance: aqui usamos as var da representação so3 (rx,ry,rz)
+        // vo_msg.orientation_variance[0] = ori_var(0);
+        // vo_msg.orientation_variance[1] = ori_var(1);
+        // vo_msg.orientation_variance[2] = ori_var(2);
+
+        // vo_msg.quality = some_quality_value; // 0..100
+        // vehicle_odometry_pub_->publish(vo);
     }
 };
 
