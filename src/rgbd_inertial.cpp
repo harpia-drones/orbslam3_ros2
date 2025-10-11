@@ -7,22 +7,30 @@
 #include <sensor_msgs/msg/imu.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
 
 #include <mutex>
 #include <queue>
+#include <chrono>
+
 
 using namespace std::placeholders;
 using namespace std::chrono_literals;
-
+using px4_msgs::msg::VehicleOdometry;
 
 class RgbdInertialSlamNode 
 : public rclcpp::Node
 {
     public:
     RgbdInertialSlamNode(const std::string& node_name)
-    : Node(node_name), last_timestamp(0.0), timestamp(0.00001)
+    : Node(node_name)
     {
         RCLCPP_INFO(this->get_logger(), "Node do RGBDInertial começou a rodar");
+
+        for(int i=0; i < 15; i++) {
+            pos_buffer_.push(Eigen::Vector3f(0.0f, 0.0f, 0.0f));
+            time_buffer_.push(0.0);
+        }
 
         // Parameters
         this->declare_parameter<std::string>("orb_voc_path");
@@ -49,10 +57,8 @@ class RgbdInertialSlamNode
         );
 
 
-        // Publishers
-        pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("pose", 10);
-        path_pub_ = this->create_publisher<nav_msgs::msg::Path>("trajectory", 10);
-        path_msg_.header.frame_id = "odom";  // Initialize Path
+        // Publisher
+        vo_pub_ = this->create_publisher<VehicleOdometry>("vehicle_odometry", 10);
 
         // Timer to loop
         period_ = std::chrono::milliseconds(1000/camera_fps);
@@ -62,18 +68,6 @@ class RgbdInertialSlamNode
                 slam_loop();
             }
         );
-
-        auto pose = geometry_msgs::msg::PoseStamped();
-        pose.header.stamp = this->get_clock()->now();
-        pose.header.frame_id = "odom";
-        pose.pose.position.x = 0.0;
-        pose.pose.position.y = 0.0;
-        pose.pose.position.z = 0.0;
-        pose.pose.orientation.x = 0.0;
-        pose.pose.orientation.y = 0.0;
-        pose.pose.orientation.z = 0.0;
-        pose.pose.orientation.w = 1.0;
-        last_published_pose = pose;
     }
 
     ~RgbdInertialSlamNode() 
@@ -108,6 +102,8 @@ private:
     rclcpp::Time header_timestamp; 
     cv::Mat rgb_frame, depth_frame;
     std::queue<sensor_msgs::msg::Imu::SharedPtr> imu_buffer_;
+    std::queue<Eigen::Vector3f> pos_buffer_;
+    std::queue<double> time_buffer_;
 
     geometry_msgs::msg::PoseStamped last_published_pose;
 
@@ -195,11 +191,11 @@ private:
         }
 
         if (slam_threads_started) {
-            get_pose(Tcw, header_timestamp);
+            get_pose(Tcw, header_timestamp, vImuMeas.back().angular_velocity);
         }
     }
 
-    void get_pose(const Sophus::SE3f& Tcw, const rclcpp::Time time)
+    void get_pose(const Sophus::SE3f& Tcw, const rclcpp::Time time, const geometry_msgs::msg::Vector3 av)
     {
         // Get inverse of Tcw : Twc
         Sophus::SE3f Twc = Tcw.inverse();
@@ -208,29 +204,37 @@ private:
         Eigen::Matrix3f R = Twc.rotationMatrix();
         Eigen::Vector3f t = Twc.translation();
 
-        // Convert to PoseStamped
-        auto pose_msg = geometry_msgs::msg::PoseStamped();
+        auto fifteen_ago = pos_buffer_.pop();
+        pos_buffer_.push(t);
 
-        pose_msg.header.stamp = header_timestamp;
-        pose_msg.header.frame_id = "odom";
+        auto fifteen_ago_seconds = time_buffer_.pop();
+        time_buffer_.push(header_timestamp.seconds());
 
-        pose_msg.pose.position.x = t(0);
-        pose_msg.pose.position.y = t(1);
-        pose_msg.pose.position.z = t(2);
+        double dt = header_timestamp.seconds() - fifteen_ago_seconds;
+        Eigen::Vector3f v = (t - fifteen_ago) / dt;
 
-        Eigen::Quaternionf q(R);
-        pose_msg.pose.orientation.x = q.x();
-        pose_msg.pose.orientation.y = q.y();
-        pose_msg.pose.orientation.z = q.z();
-        pose_msg.pose.orientation.w = q.w();
-
-        pose_pub_->publish(pose_msg);
-
-        // Acumulate trajectory
-        path_msg_.header.stamp = time;
-        path_msg_.poses.push_back(pose_msg);
+        VehicleOdometry msg;
+        msg.timestamp = static_cast<uint64_t>( header_timestamp.nanoseconds() / 1000 );;
+        msg.timestamp_sample = msg.timestamp
         
-        path_pub_->publish(path_msg_);
+
+        msg.pose_frame = VehicleOdometry::POSE_FRAME_FRD;
+
+        msg.position = {t(0), t(1), t(2)};
+        msg.q = {q.w(), q.x(), q.y(), q.z()};
+
+        msg.velocity_frame = VehicleOdometry::VELOCITY_FRAME_FRD;
+        msg.velocity = {v.x, v.y, v.z};
+        msg.angular_velocity = {av.x, av.y, av.z};
+
+        msg.position_variance     = {NaN, NaN, NaN};
+        msg.orientation_variance  = {NaN, NaN, NaN};
+        msg.velocity_variance     = {NaN, NaN, NaN};
+
+        msg.reset_counter = 0;
+        msg.quality = -1;
+
+        vo_pub_->publish(msg);
     }
 };
 

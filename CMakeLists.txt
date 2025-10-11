@@ -16,6 +16,7 @@ find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(px4_msgs REQUIRED)
 
 # OBS.: the ORB_SLAM3 include by itself: OpenCV, Sophus, Eigen, DBoW2, Pangolin, g2o. 
 # It is not necessary execute find_packages() for those packages.
