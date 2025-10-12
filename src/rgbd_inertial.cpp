@@ -105,7 +105,7 @@ private:
     // Publishers
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
-
+    
     nav_msgs::msg::Path path_msg_; // path message
 
     // Subscribers
@@ -337,13 +337,12 @@ private:
         // Check if slam is actually running 
         if (Tcw.matrix().isIdentity()) 
         {
-            RCLCPP_WARN(this->get_logger(), "Starting the SLAM system... This may take a while.");
-            return;
+            RCLCPP_WARN(this->get_logger(), "Drone is not moving");
         }
         else
         {
             slam_threads_started = true; // marks that slam is actually running
-            RCLCPP_INFO(this->get_logger(), "All SLAM threads has started!");
+            RCLCPP_INFO(this->get_logger(), "Drone is moving");
         }
 
         get_pose(Tcw, timestamp);
@@ -392,8 +391,6 @@ private:
         path_msg_.poses.push_back(pose_msg);
         
         path_pub_->publish(path_msg_);
-
-        // TODO: Convert o px4_msgs/msg/VehicleOdometry
     }
 };
 

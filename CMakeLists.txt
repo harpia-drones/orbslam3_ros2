@@ -100,6 +100,32 @@ install(TARGETS
 )
 
 # ========================================
+#     RGBD INERTIAL V2
+# ========================================
+
+add_executable(rgbd_inertial_v2
+  src/rgbd_inertial_v2.cpp
+)
+
+ament_target_dependencies(rgbd_inertial_v2
+  rclcpp
+  cv_bridge
+  sensor_msgs
+  geometry_msgs
+  nav_msgs
+  px4_msgs
+)
+
+target_link_libraries(rgbd_inertial_v2
+  ORB_SLAM3::ORB_SLAM3
+)
+
+install(TARGETS 
+  rgbd_inertial_v2
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# ========================================
 #     LAUNCH
 # ========================================
 
