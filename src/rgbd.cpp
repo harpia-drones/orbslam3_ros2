@@ -11,6 +11,7 @@
 #include <sensor_msgs/msg/imu.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
 
 #include <orbslam3/System.h>
 
@@ -20,11 +21,11 @@ using namespace std::chrono_literals;
 
 
 
-class RgbdInertialSlamNode 
+class RgbdSlamNode 
 : public rclcpp::Node
 {
     public:
-    RgbdInertialSlamNode(const std::string& node_name)
+    RgbdSlamNode(const std::string& node_name)
     : Node(node_name)
     {
         RCLCPP_INFO(this->get_logger(), "SLAM Node has been started in RGBD-Inertial mode.");
@@ -55,13 +56,10 @@ class RgbdInertialSlamNode
         // =================================================
 
         rgb_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
-            "rgb", 10, std::bind(&RgbdInertialSlamNode::rgb_callback, this, std::placeholders::_1)
+            "rgb", 10, std::bind(&RgbdSlamNode::rgb_callback, this, std::placeholders::_1)
         );
         depth_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
-            "depth", 10, std::bind(&RgbdInertialSlamNode::depth_callback, this, std::placeholders::_1)
-        );
-        imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-            "imu", rclcpp::SensorDataQoS(), std::bind(&RgbdInertialSlamNode::imu_callback, this, std::placeholders::_1)
+            "depth", 10, std::bind(&RgbdSlamNode::depth_callback, this, std::placeholders::_1)
         );
 
         // =================================================
@@ -85,7 +83,7 @@ class RgbdInertialSlamNode
         );
     }
 
-    ~RgbdInertialSlamNode() 
+    ~RgbdSlamNode() 
     {
         SLAM->Shutdown();
         RCLCPP_INFO(this->get_logger(), "SLAM threads stopped!");
@@ -127,9 +125,6 @@ private:
     cv::Mat depth_buffer_;
     rclcpp::Time timestamp_buffer_;
 
-    // Imu callback
-    std::vector<ORB_SLAM3::IMU::Point> imu_buffer_;
-
 
     // =================================================
     //     METHODS
@@ -153,7 +148,8 @@ private:
             rclcpp::Time timestamp = msg->header.stamp;   
 
             // Get rgb frame
-            cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, msg->encoding);
+            cv_bridge::CvImagePtr cv_ptr;                 
+            cv_ptr = cv_bridge::toCvCopy(msg, msg->encoding);
             cv::Mat color_frame = cv_ptr->image;  
             
             // Convert from bgr to gray scale
@@ -210,14 +206,9 @@ private:
     {        
         try 
         {
-            cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, msg->encoding);
+            cv_bridge::CvImagePtr cv_ptr;
+            cv_ptr = cv_bridge::toCvCopy(msg, msg->encoding);
             cv::Mat depth_frame = cv_ptr->image;
-
-            // Convert encoding to CV_32F
-            if (depth_frame.type() == CV_16UC1) 
-            { 
-                depth_frame.convertTo(depth_frame, CV_32F, 1.0/1000.0); 
-            }
 
             {
                 std::lock_guard<std::mutex> lock(depth_mtx);
@@ -230,42 +221,6 @@ private:
         }
     }
 
-
-    /**
-    * @brief Callback to process incoming IMU measurements from a ROS topic.
-    *
-    * Extracts linear acceleration and angular velocity from the IMU message,
-    * converts them into OpenCV 3D points, and packages them into an
-    * ORB_SLAM3::IMU::Point structure with a timestamp. The result is then
-    * appended to a shared IMU buffer protected by a mutex.
-    *
-    * @param msg Pointer to the received IMU message (sensor_msgs::msg::Imu).
-    */
-    void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) 
-    {
-        double timestamp = rclcpp::Time(msg->header.stamp).seconds();
-        
-        cv::Point3f Acc = cv::Point3f(
-            -msg->linear_acceleration.y, 
-            msg->linear_acceleration.x, 
-            msg->linear_acceleration.z
-        );
-
-        cv::Point3f Gyro= cv::Point3f(
-            -msg->angular_velocity.y, 
-            msg->angular_velocity.x, 
-            msg->angular_velocity.z
-        );
-        
-        RCLCPP_INFO(this->get_logger(), "%.6f", timestamp);
-
-        ORB_SLAM3::IMU::Point imu_data(Acc, Gyro, timestamp);
-
-        {
-            std::lock_guard<std::mutex> lock(imu_mtx);
-            imu_buffer_.push_back(imu_data);
-        }
-    }
 
     /**
     * @brief Main SLAM processing loop.
@@ -282,7 +237,6 @@ private:
         cv::Mat depth_frame;
         rclcpp::Time timestamp;
         double tframe;
-        std::vector<ORB_SLAM3::IMU::Point> vImuMeas;
 
         {
             std::lock_guard lock(rgb_mtx);
@@ -290,7 +244,7 @@ private:
             // Copy data from buffers
             gray_frame = gray_buffer_.clone();
             timestamp = timestamp_buffer_;
-            tframe = rclcpp::Time(timestamp).seconds();
+            tframe = timestamp.seconds() + timestamp.nanoseconds() * 1e-9;
         }
 
         {
@@ -300,49 +254,14 @@ private:
             depth_frame = depth_buffer_.clone();
         }
 
-        {
-            std::lock_guard lock(imu_mtx);
-
-            // Copy data from buffer
-            vImuMeas = std::move(imu_buffer_);
-
-            // Clear buffer
-            imu_buffer_.clear();
-        }
-
-        // Resize depth to match gray if necessary
-        if (image_scale != 1.f && !depth_frame.empty())
-        {
-            int width = static_cast<int>(depth_frame.cols * image_scale);
-            int height = static_cast<int>(depth_frame.rows * image_scale);
-
-            cv::Mat depth_resized;
-            cv::resize(depth_frame, depth_resized, cv::Size(width, height), 0, 0, cv::INTER_NEAREST); 
-
-            depth_frame = depth_resized;
-        }
-
-        // Sanity checks
-        if (gray_frame.rows != depth_frame.rows || gray_frame.cols != depth_frame.cols)
-        {
-            RCLCPP_ERROR(this->get_logger(), "RGB and Depth size mismatch after resize: rgb=%dx%d depth=%dx%d",
-                gray_frame.cols, gray_frame.rows, depth_frame.cols, depth_frame.rows);
-            return;
-        }
     
-        // RCLCPP_INFO(this->get_logger(), 
-        //     "Calling TrackRGBD: gray=%dx%d depth=%dx%d imu=%zu t=%.6f",
-        //     gray_frame.cols, gray_frame.rows,
-        //     depth_frame.cols, depth_frame.rows,
-        //     vImuMeas.size(), tframe);
+        RCLCPP_INFO(this->get_logger(), 
+            "Calling TrackRGBD: gray=%dx%d depth=%dx%d imu=%zu t=%.6f",
+            gray_frame.cols, gray_frame.rows,
+            depth_frame.cols, depth_frame.rows,
+            tframe);
 
 
-        // Verification
-        if (vImuMeas.empty()) 
-        {
-            RCLCPP_WARN(this->get_logger(), "IMU not ready yet, skipping iteration");
-            return;
-        }
         if (gray_frame.empty()) 
         {
             RCLCPP_WARN(this->get_logger(), "RGB frames not ready yet, skipping iteration");
@@ -354,8 +273,7 @@ private:
             return;
         }
 
-        // RCLCPP_INFO(this->get_logger(), "Estou prestar a rodar o TrackRGBD");
-        RCLCPP_INFO(this->get_logger(), "gray=%d depth=%d", gray_frame.type(), depth_frame.type());
+        RCLCPP_INFO(this->get_logger(), "Estou prestar a rodar o TrackRGBD");
 
         // Submit frame_gray and timestamp to SLAM track
         Sophus::SE3f Tcw = SLAM->TrackRGBD(gray_frame, depth_frame, tframe, vImuMeas);
@@ -424,7 +342,7 @@ private:
 int main(int argc, char* argv[])
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<RgbdInertialSlamNode>("slam_rgbd_inertial_node");
+    auto node = std::make_shared<RgbdSlamNode>("slam_rgbd_inertial_node");
 
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(node);

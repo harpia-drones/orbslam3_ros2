@@ -126,6 +126,32 @@ install(TARGETS
 )
 
 # ========================================
+#     TESTE GEMINI
+# ========================================
+
+add_executable(teste_gemini
+  src/teste_gemini.cpp
+)
+
+ament_target_dependencies(teste_gemini
+  rclcpp
+  cv_bridge
+  sensor_msgs
+  geometry_msgs
+  nav_msgs
+  px4_msgs
+)
+
+target_link_libraries(teste_gemini
+  ORB_SLAM3::ORB_SLAM3
+)
+
+install(TARGETS 
+  teste_gemini
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# ========================================
 #     LAUNCH
 # ========================================
 

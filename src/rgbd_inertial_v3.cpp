@@ -1,6 +1,7 @@
 #include <queue>
 #include <mutex>
 #include <vector>
+#include <memory>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -11,6 +12,7 @@
 #include <sensor_msgs/msg/imu.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
 
 #include <orbslam3/System.h>
 
@@ -60,8 +62,11 @@ class RgbdInertialSlamNode
         depth_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
             "depth", 10, std::bind(&RgbdInertialSlamNode::depth_callback, this, std::placeholders::_1)
         );
-        imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-            "imu", rclcpp::SensorDataQoS(), std::bind(&RgbdInertialSlamNode::imu_callback, this, std::placeholders::_1)
+        gyro_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+            "gyro", rclcpp::SensorDataQoS(), std::bind(&RgbdInertialSlamNode::gyro_callback, this, std::placeholders::_1)
+        );
+        accel_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+            "accel", rclcpp::SensorDataQoS(), std::bind(&RgbdInertialSlamNode::accel_callback, this, std::placeholders::_1)
         );
 
         // =================================================
@@ -110,25 +115,29 @@ private:
     // Subscribers
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr rgb_sub_; 
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub_; 
-    rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_; 
+    rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr gyro_sub_; 
+    rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr accel_sub_; 
     
     // SLAM
     std::unique_ptr<ORB_SLAM3::System> SLAM;
     float image_scale;
-    bool slam_threads_started = false;
     
     // mutexes
     std::mutex rgb_mtx;
     std::mutex depth_mtx;
-    std::mutex imu_mtx;
+    std::mutex gyro_mtx;
+    std::mutex accel_mtx;
 
-    // Image callback
-    cv::Mat gray_buffer_;
-    cv::Mat depth_buffer_;
-    rclcpp::Time timestamp_buffer_;
+    // Buffers
+    std::shared_ptr<cv::Mat> gray_buffer_;
+    std::shared_ptr<cv::Mat> depth_buffer_;
 
-    // Imu callback
-    std::vector<ORB_SLAM3::IMU::Point> imu_buffer_;
+    std::shared_ptr<rclcpp::Time> timestamp_buffer_;
+
+    std::shared_ptr<std::vector<ORB_SLAM3::IMU::Point>> imu_buffer_;
+
+    std::shared_ptr<Eigen::Vector3f> gyro_buffer_;
+    std::shared_ptr<Eigen::Vector3f> accel_buffer_;
 
 
     // =================================================
@@ -149,12 +158,12 @@ private:
     {
         try 
         {
-            // Get timestamp
-            rclcpp::Time timestamp = msg->header.stamp;   
+            // Get timestamp in seconds
+            rclcpp::Time timestamp = rclcpp::Time(msg->header.stamp).seconds();  
 
             // Get rgb frame
             cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, msg->encoding);
-            cv::Mat color_frame = cv_ptr->image;  
+            cv::Mat color_frame = cv_ptr->image; 
             
             // Convert from bgr to gray scale
             cv::Mat gray_frame;
@@ -184,8 +193,8 @@ private:
             {
                 std::lock_guard<std::mutex> lock(rgb_mtx);
                 
-                gray_buffer_ = gray_frame.clone();
-                timestamp_buffer_ = timestamp;
+                *gray_buffer_ = gray_frame.clone();
+                *timestamp_buffer_ = timestamp;
             }
         } 
         catch (cv_bridge::Exception& e) 
@@ -243,7 +252,8 @@ private:
     */
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) 
     {
-        double timestamp = rclcpp::Time(msg->header.stamp).seconds();
+        rclcpp::Time header_stamp = msg->header.stamp;
+        double timestamp = header_stamp.seconds() + header_stamp.nanoseconds() * 1e-9;
         
         cv::Point3f Acc = cv::Point3f(
             -msg->linear_acceleration.y, 
@@ -290,7 +300,7 @@ private:
             // Copy data from buffers
             gray_frame = gray_buffer_.clone();
             timestamp = timestamp_buffer_;
-            tframe = rclcpp::Time(timestamp).seconds();
+            tframe = timestamp.seconds() + timestamp.nanoseconds() * 1e-9;
         }
 
         {

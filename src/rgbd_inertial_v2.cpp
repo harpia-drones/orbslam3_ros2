@@ -157,8 +157,8 @@ private:
             auto imu_msg = imu_msgs.front();
             imu_msgs.pop();
             double imu_timestamp = imu_msg->header.stamp.sec + imu_msg->header.stamp.nanosec * 1e-9;
-            vImuMeas.emplace_back(imu_msg->linear_acceleration.z, -imu_msg->linear_acceleration.x, -imu_msg->linear_acceleration.y,
-                                  imu_msg->angular_velocity.z, -imu_msg->angular_velocity.x, -imu_msg->angular_velocity.y,
+            vImuMeas.emplace_back(-imu_msg->linear_acceleration.y, imu_msg->linear_acceleration.x, imu_msg->linear_acceleration.z,
+                                  -imu_msg->angular_velocity.y, imu_msg->angular_velocity.x, imu_msg->angular_velocity.z,
                                   imu_timestamp);
         }
 
